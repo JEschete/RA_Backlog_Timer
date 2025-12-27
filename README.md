@@ -92,26 +92,28 @@ Fetching Want to Play list for 'USER' from RetroAchievements...
 Processing 345 games...
 
 Complete!
-  Processed: 345
+  Total games: 345
+  From cache: 0
+  Fetched: 345
   Skipped (already had data): 0
-  Games with HLTB data: 323
-  Games with RA mastery data: 298
+  Games with HLTB data: 338
+  Games with RA mastery data: 334
 
 HLTB Match quality:
-  Exact matches: 267
-  Fuzzy matches: 30
-  Loose matches: 8
-  Poor matches (needs review): 0
-  No match found: 18
+  Exact matches: 299
+  Fuzzy matches: 11
+  Loose matches: 2
+  Poor matches (needs review): 21
+  No match found: 5
 
-RA vs HLTB Comparison (285 games with both):
-  Avg HLTB Completionist: 45.8 hours
-  Avg RA Mastery: 68.2 hours
-  RA takes 1.5x longer on average
+RA vs HLTB Comparison (323 games with both):
+  Avg HLTB Completionist: 48.7 hours
+  Avg RA Mastery: 42.9 hours
+  RA takes 0.9x longer on average
 
 RA Mastery Time estimates:
-  Total Mastery time: 18450.3 hours (768.8 days)
-  Average Mastery: 61.9 hours
+  Total Mastery time: 14393.9 hours (599.7 days)
+  Average Mastery: 43.1 hours
 
 Games by system:
   PlayStation 2: 83
@@ -126,18 +128,21 @@ Games by system:
   GameCube: 14
 
 Most Efficient Games (highest points per hour of mastery):
-  125.0 pts/hr -Ings (250 pts, 2.0h RA)
-  98.5 pts/hr - Super Mario Bros. (394 pts, 4.0h RA)
-  ...
+  135.2 pts/hr - Golden Axe (284 pts, 2.1h RA)
+  115.6 pts/hr - Mighty Morphin Power Rangers: The Movie (416 pts, 3.6h RA)
+  92.3 pts/hr - Alien Soldier (323 pts, 3.5h RA)
+  88.3 pts/hr - Altered Beast (318 pts, 3.6h RA)
+  85.7 pts/hr - The Adventures of Batman & Robin (240 pts, 2.8h RA)
+  80.9 pts/hr - Castlevania: The Adventure (445 pts, 5.5h RA)
+  77.9 pts/hr - Streets of Rage (740 pts, 9.5h RA)
+  75.6 pts/hr - Aladdin (295 pts, 3.9h RA)
+  69.0 pts/hr - Streets of Rage 2 (331 pts, 4.8h RA)
+  66.7 pts/hr - Alien 3 (360 pts, 5.4h RA)
 
 Results saved to: HowLongToBeat.xlsx
 
-Games without HLTB data (22):
-  - Pokemon FireRed Version
-  - Pokemon LeafGreen Version
-  - Kirby no Kirakira Kids | Kirby's Super Star Stacker
-  - Dragon Quest I & II
-  ... and 18 more
+Games without any time data (1):
+  - SaGa Frontier II
 ```
 
 ### Output
