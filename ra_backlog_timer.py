@@ -42,7 +42,8 @@ except ImportError:
     print("      Install keyring for secure storage: pip install keyring")
 
 # Constants
-DELAY_BETWEEN_REQUESTS = 0.5
+DELAY_BETWEEN_REQUESTS = 0.3  # Reduced since we're limiting concurrency
+MAX_CONCURRENT_REQUESTS = 5   # Number of simultaneous HLTB lookups
 RA_API_BASE = "https://retroachievements.org/API"
 PROGRESS_FILE = 'hltb_progress.json'
 RA_CACHE_FILE = 'ra_wanttoplay_cache.json'
@@ -622,8 +623,69 @@ async def search_game(game_title: str, system: str = None) -> dict:
     return result
 
 
+async def process_single_game(
+    idx: int, 
+    row: pd.Series, 
+    total: int,
+    session: aiohttp.ClientSession, 
+    api_key: str,
+    semaphore: asyncio.Semaphore,
+    progress: dict,
+    progress_path: Path
+) -> dict:
+    """Process a single game with semaphore-controlled concurrency."""
+    title = row['Title']
+    system = row.get('System', '')
+    ra_id = row.get('RA_ID')
+    cache_key = f"{title}|{system}"
+    
+    async with semaphore:
+        # Small delay to be polite
+        await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
+        
+        print(f"[{idx + 1}/{total}] {title} ({system})...", end=" ", flush=True)
+        
+        # Fetch HLTB data
+        hltb_result = await search_game(title, system)
+        
+        # Fetch RA progression data
+        ra_result = {}
+        if ra_id:
+            ra_result = await fetch_game_progression(session, api_key, ra_id)
+        
+        # Merge results
+        combined = {**hltb_result, **ra_result}
+        
+        # Print result
+        if hltb_result['hltb_name'] or ra_result.get('ra_master_time'):
+            parts = []
+            if hltb_result['beat']:
+                parts.append(f"HLTB: {hltb_result['beat']}h")
+            if ra_result.get('ra_master_time'):
+                parts.append(f"RA Master: {ra_result['ra_master_time']}h")
+            
+            match_name = hltb_result.get('hltb_name', 'N/A')
+            times_str = f"[{', '.join(parts)}]" if parts else '[No times]'
+            
+            # Color based on match quality
+            if hltb_result['hltb_name'] and hltb_result['similarity'] < 0.6:
+                print(f"→ {Colors.ORANGE}{match_name}{Colors.RESET} {times_str}")
+            else:
+                print(f"→ {match_name} {times_str}")
+        else:
+            print(f"{Colors.RED}✗ {hltb_result['error'] or 'No data'}{Colors.RESET}")
+        
+        return {
+            'idx': idx,
+            'cache_key': cache_key,
+            'hltb_result': hltb_result,
+            'ra_result': ra_result,
+            'combined': combined
+        }
+
+
 async def process_games(df: pd.DataFrame, excel_path: Path, api_key: str):
-    """Process all games with HLTB lookups and RA progression data."""
+    """Process all games with concurrent HLTB lookups and RA progression data."""
     progress = {}
     progress_path = Path(PROGRESS_FILE)
     if progress_path.exists():
@@ -632,103 +694,105 @@ async def process_games(df: pd.DataFrame, excel_path: Path, api_key: str):
         print(f"Resuming from progress file ({len(progress)} games cached)")
     
     total = len(df)
-    updated = 0
     skipped = 0
+    from_cache = 0
     
-    print(f"\nProcessing {total} games...\n")
+    # First pass: apply cached results
+    for idx, row in df.iterrows():
+        title = row['Title']
+        system = row.get('System', '')
+        cache_key = f"{title}|{system}"
+        
+        # Skip if already has all data in dataframe
+        if (pd.notna(row.get('HLTB_Beat')) and pd.notna(row.get('HLTB_Complete')) and
+            pd.notna(row.get('RA_Master'))):
+            skipped += 1
+            continue
+        
+        # Apply from progress cache
+        if cache_key in progress:
+            cached = progress[cache_key]
+            if cached.get('beat') is not None:
+                df.at[idx, 'HLTB_Beat'] = cached['beat']
+            if cached.get('complete') is not None:
+                df.at[idx, 'HLTB_Complete'] = cached['complete']
+            if cached.get('ra_beat_time') is not None:
+                df.at[idx, 'RA_Beat'] = cached['ra_beat_time']
+            if cached.get('ra_master_time') is not None:
+                df.at[idx, 'RA_Master'] = cached['ra_master_time']
+            if cached.get('distinct_players') is not None:
+                df.at[idx, 'RA_Players'] = cached['distinct_players']
+            if cached.get('comment') is not None:
+                df.at[idx, 'Comments'] = cached['comment']
+            from_cache += 1
+    
+    # Build list of games that need processing
+    games_to_process = []
+    for idx, row in df.iterrows():
+        title = row['Title']
+        system = row.get('System', '')
+        cache_key = f"{title}|{system}"
+        
+        if cache_key not in progress and not (
+            pd.notna(row.get('HLTB_Beat')) and pd.notna(row.get('HLTB_Complete')) and
+            pd.notna(row.get('RA_Master'))):
+            games_to_process.append((idx, row))
+    
+    print(f"\nProcessing {total} games ({from_cache} from cache, {skipped} skipped, {len(games_to_process)} to fetch)...\n")
+    print(f"Using {MAX_CONCURRENT_REQUESTS} concurrent requests")
     print("-" * 70)
     
-    async with aiohttp.ClientSession() as session:
-        for idx, row in df.iterrows():
-            title = row['Title']
-            system = row.get('System', '')
-            ra_id = row.get('RA_ID')
-            
-            # Skip if already has all data
-            if (pd.notna(row.get('HLTB_Beat')) and pd.notna(row.get('HLTB_Complete')) and
-                pd.notna(row.get('RA_Master'))):
-                skipped += 1
-                continue
-            
-            cache_key = f"{title}|{system}"
-            
-            # Check progress cache
-            if cache_key in progress:
-                cached = progress[cache_key]
-                if cached.get('beat') is not None:
-                    df.at[idx, 'HLTB_Beat'] = cached['beat']
-                if cached.get('complete') is not None:
-                    df.at[idx, 'HLTB_Complete'] = cached['complete']
-                if cached.get('ra_beat_time') is not None:
-                    df.at[idx, 'RA_Beat'] = cached['ra_beat_time']
-                if cached.get('ra_master_time') is not None:
-                    df.at[idx, 'RA_Master'] = cached['ra_master_time']
-                if cached.get('distinct_players') is not None:
-                    df.at[idx, 'RA_Players'] = cached['distinct_players']
-                if cached.get('comment') is not None:
-                    df.at[idx, 'Comments'] = cached['comment']
-                updated += 1
-                continue
-            
-            print(f"[{idx + 1}/{total}] {title} ({system})...", end=" ", flush=True)
-            
-            # Fetch HLTB data
-            hltb_result = await search_game(title, system)
-            
-            # Fetch RA progression data
-            ra_result = {}
-            if ra_id:
-                ra_result = await fetch_game_progression(session, api_key, ra_id)
-            
-            # Merge results for caching
-            combined = {**hltb_result, **ra_result}
-            
-            # Update dataframe
-            if hltb_result['beat'] is not None:
-                df.at[idx, 'HLTB_Beat'] = hltb_result['beat']
-            if hltb_result['complete'] is not None:
-                df.at[idx, 'HLTB_Complete'] = hltb_result['complete']
-            if ra_result.get('ra_beat_time') is not None:
-                df.at[idx, 'RA_Beat'] = ra_result['ra_beat_time']
-            if ra_result.get('ra_master_time') is not None:
-                df.at[idx, 'RA_Master'] = ra_result['ra_master_time']
-            if ra_result.get('distinct_players') is not None:
-                df.at[idx, 'RA_Players'] = ra_result['distinct_players']
-            if hltb_result['comment'] is not None:
-                df.at[idx, 'Comments'] = hltb_result['comment']
-            
-            # Save to progress cache
-            progress[cache_key] = combined
-            with open(progress_path, 'w') as f:
-                json.dump(progress, f)
-            
-            # Print result
-            if hltb_result['hltb_name'] or ra_result.get('ra_master_time'):
-                parts = []
-                if hltb_result['beat']:
-                    parts.append(f"HLTB: {hltb_result['beat']}h")
-                if ra_result.get('ra_master_time'):
-                    parts.append(f"RA Master: {ra_result['ra_master_time']}h")
+    if games_to_process:
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        
+        async with aiohttp.ClientSession() as session:
+            # Process in batches to allow periodic saves
+            batch_size = 25
+            for batch_start in range(0, len(games_to_process), batch_size):
+                batch = games_to_process[batch_start:batch_start + batch_size]
                 
-                match_name = hltb_result.get('hltb_name', 'N/A')
-                times_str = f"[{', '.join(parts)}]" if parts else '[No times]'
+                tasks = [
+                    process_single_game(
+                        idx, row, total, session, api_key, 
+                        semaphore, progress, progress_path
+                    )
+                    for idx, row in batch
+                ]
                 
-                # Color based on match quality
-                if hltb_result['hltb_name'] and hltb_result['similarity'] < 0.6:
-                    # Orange for low confidence matches
-                    print(f"→ {Colors.ORANGE}{match_name}{Colors.RESET} {times_str}")
-                else:
-                    print(f"→ {match_name} {times_str}")
-            else:
-                # Red for no match
-                print(f"{Colors.RED}✗ {hltb_result['error'] or 'No data'}{Colors.RESET}")
-            
-            updated += 1
-            await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
-            
-            if updated % 25 == 0:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Apply results to dataframe and save progress
+                for result in results:
+                    if isinstance(result, Exception):
+                        print(f"Error: {result}")
+                        continue
+                    
+                    idx = result['idx']
+                    hltb_result = result['hltb_result']
+                    ra_result = result['ra_result']
+                    
+                    if hltb_result['beat'] is not None:
+                        df.at[idx, 'HLTB_Beat'] = hltb_result['beat']
+                    if hltb_result['complete'] is not None:
+                        df.at[idx, 'HLTB_Complete'] = hltb_result['complete']
+                    if ra_result.get('ra_beat_time') is not None:
+                        df.at[idx, 'RA_Beat'] = ra_result['ra_beat_time']
+                    if ra_result.get('ra_master_time') is not None:
+                        df.at[idx, 'RA_Master'] = ra_result['ra_master_time']
+                    if ra_result.get('distinct_players') is not None:
+                        df.at[idx, 'RA_Players'] = ra_result['distinct_players']
+                    if hltb_result['comment'] is not None:
+                        df.at[idx, 'Comments'] = hltb_result['comment']
+                    
+                    progress[result['cache_key']] = result['combined']
+                
+                # Save progress after each batch
+                with open(progress_path, 'w') as f:
+                    json.dump(progress, f)
                 df.to_excel(excel_path, index=False)
-                print(f"    [Auto-saved progress to {excel_path}]")
+                
+                if batch_start + batch_size < len(games_to_process):
+                    print(f"    [Saved progress: {batch_start + len(batch)}/{len(games_to_process)} fetched]")
     
     df.to_excel(excel_path, index=False)
     
@@ -739,7 +803,9 @@ async def process_games(df: pd.DataFrame, excel_path: Path, api_key: str):
     # Summary
     print("-" * 70)
     print(f"\nComplete!")
-    print(f"  Processed: {updated}")
+    print(f"  Total games: {total}")
+    print(f"  From cache: {from_cache}")
+    print(f"  Fetched: {len(games_to_process)}")
     print(f"  Skipped (already had data): {skipped}")
     print(f"  Games with HLTB data: {df['HLTB_Beat'].notna().sum()}")
     print(f"  Games with RA mastery data: {df['RA_Master'].notna().sum()}")
@@ -782,6 +848,8 @@ async def process_games(df: pd.DataFrame, excel_path: Path, api_key: str):
     # Show most efficient games (best points per hour based on RA mastery time)
     if df['Points_Per_Hour'].notna().any():
         print(f"\nMost Efficient Games (highest points per hour of mastery):")
+        # Ensure numeric dtype for nlargest
+        df['Points_Per_Hour'] = pd.to_numeric(df['Points_Per_Hour'], errors='coerce')
         efficient = df[df['Points_Per_Hour'].notna()].nlargest(10, 'Points_Per_Hour')
         for _, row in efficient.iterrows():
             time_used = row['RA_Master'] or row['HLTB_Complete'] or row['HLTB_Beat']

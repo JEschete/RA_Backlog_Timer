@@ -1,0 +1,17 @@
+# Excel outputs
+*.xlsx
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Local Data & Caches (RetroAchievements/HLTB)
+ra_wanttoplay_cache.json
+hltb_progress.json
+
+# Security (Credentials)
+.ra_credentials.json
+
+# Environments
+.venv/
+env/
