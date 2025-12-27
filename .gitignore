@@ -1,5 +1,6 @@
 # Excel outputs
 *.xlsx
+*.csv
 
 # Python artifacts
 __pycache__/
