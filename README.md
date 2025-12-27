@@ -79,7 +79,7 @@ python ra_backlog_timer.py --refresh
 python ra_backlog_timer.py --reset-creds
 ```
 
-### Sample Output
+### Sample Terminal Output
 
 ```
 ======================================================================
@@ -92,11 +92,15 @@ Fetching Want to Play list for 'USER' from RetroAchievements...
 Processing 345 games...
 
 ----------------------------------------------------------------------
-[1/345] Sonic the Hedgehog (Genesis/Mega Drive)... → Sonic the Hedgehog [HLTB: 2.1h, RA Master: 8.0h]
-[2/345] Aladdin (Genesis/Mega Drive)... → Disney's Aladdin [HLTB: 1.8h, RA Master: 3.9h]
-[3/345] Streets of Rage 2 (Genesis/Mega Drive)... → Streets of Rage 2 [HLTB: 1.6h, RA Master: 4.8h]
-[4/345] Ecco the Dolphin (Genesis/Mega Drive)... → Ecco the Dolphin [HLTB: 5.3h, RA Master: 9.9h]
-[5/345] Sonic the Hedgehog 2 (Genesis/Mega Drive)... → Sonic the Hedgehog 2 [HLTB: 2.4h, RA Master: 11.7h]
+[318/345] Crash Twinsanity (PlayStation 2)... [319/345] Drakengard (PlayStation 2)... [320/345] Spyro: A Hero's Tail (PlayStation 2)... [321/345] Spyro: Enter the Dragonfly (PlayStation 2)... → .hack//Infection [HLTB: 17.1h, RA Master: 23.0h]
+[322/345] Unlimited Saga (PlayStation 2)... → Crash Twinsanity [HLTB: 5.1h, RA Master: 15.5h]
+[323/345] Monster Hunter (PlayStation 2)... → Drakengard [HLTB: 10.3h, RA Master: 81.8h]
+→ Unlimited Saga [HLTB: 29.9h]
+[324/345] Rayman 3: Hoodlum Havoc (PlayStation 2)... [325/345] Silent Hill: Shattered Memories (PlayStation 2)... → Spyro: A Hero's Tail [HLTB: 9.9h, RA Master: 23.2h]
+→ Spyro: Enter the Dragonfly [HLTB: 9.3h, RA Master: 14.0h]
+→ Monster Hunter [HLTB: 42.6h, RA Master: 35.2h]
+→ Silent Hill: Shattered Memories [HLTB: 6.8h, RA Master: 19.0h]
+→ Rayman 3: Hoodlum Havoc [HLTB: 8.7h, RA Master: 17.4h]
 ----------------------------------------------------------------------
 
 Complete!
