@@ -95,9 +95,6 @@ Processing 345 games...
 [3/345] Streets of Rage 2 (Genesis/Mega Drive)... → Streets of Rage 2 [HLTB: 1.6h, RA Master: 4.8h]
 [4/345] Ecco the Dolphin (Genesis/Mega Drive)... → Ecco the Dolphin [HLTB: 5.3h, RA Master: 9.9h]
 [5/345] Sonic the Hedgehog 2 (Genesis/Mega Drive)... → Sonic the Hedgehog 2 [HLTB: 2.4h, RA Master: 11.7h]
-...
-[344/345] Final Fantasy Chronicles: Final Fantasy IV [Subset - Rare Drops] (PlayStation)... → Final Fantasy Chronicles [Beat: 43.0h, 100%: 104.2h]
-[345/345] Final Fantasy X-2 (PlayStation 2)... → Final Fantasy X-2 [Beat: 29.9h, 100%: 112.1h]
 ----------------------------------------------------------------------
 
 Complete!
