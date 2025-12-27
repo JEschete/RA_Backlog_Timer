@@ -259,10 +259,28 @@ class CredentialDialog:
                                 style='Title.TLabel')
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, s(10)))
         
-        # Info text
-        info_text = "Enter your RA username and API key.\nGet your API key from: retroachievements.org/settings"
-        info_label = ttk.Label(main_frame, text=info_text, style='Info.TLabel')
-        info_label.grid(row=1, column=0, columnspan=2, pady=(0, s(15)))
+        # Info text with clickable link
+        info_frame = ttk.Frame(main_frame)
+        info_frame.grid(row=1, column=0, columnspan=2, pady=(0, s(15)))
+        
+        info_label1 = ttk.Label(info_frame, text="Enter your RA username and API key.", style='Info.TLabel')
+        info_label1.pack()
+        
+        # Frame for the "Get your API key from:" line with clickable link
+        link_frame = ttk.Frame(info_frame)
+        link_frame.pack()
+        
+        info_label2 = ttk.Label(link_frame, text="Get your API key from: ", style='Info.TLabel')
+        info_label2.pack(side='left')
+        
+        # Clickable link
+        link_label = tk.Label(link_frame, text="retroachievements.org/settings", 
+                              fg='#0066CC', cursor='hand2', 
+                              font=('Segoe UI', default_font_size, 'underline'))
+        link_label.pack(side='left')
+        link_label.bind('<Button-1>', lambda e: self._open_url('https://retroachievements.org/settings'))
+        link_label.bind('<Enter>', lambda e: link_label.config(fg='#0099FF'))
+        link_label.bind('<Leave>', lambda e: link_label.config(fg='#0066CC'))
         
         # Username
         ttk.Label(main_frame, text="Username:").grid(row=2, column=0, sticky='e', padx=(0, s(10)))
@@ -325,6 +343,11 @@ class CredentialDialog:
             self.apikey_entry.config(show='')
         else:
             self.apikey_entry.config(show='•')
+    
+    def _open_url(self, url: str):
+        """Open a URL in the default web browser."""
+        import webbrowser
+        webbrowser.open(url)
     
     def _submit(self):
         username = self.username_entry.get().strip()
@@ -869,21 +892,220 @@ async def process_games(df: pd.DataFrame, excel_path: Path, api_key: str):
     return df
 
 
-async def main_async(args):
-    """Main async entry point."""
-    username, api_key = get_credentials(reset=args.reset_creds)
-    output_path = Path(args.output)
-    
+async def lookup_single_game(api_key: str):
+    """Look up a single game by name or RA ID."""
+    print("\n" + "=" * 70)
+    print("Single Game Lookup")
     print("=" * 70)
+    
+    query = input("\nEnter game name or RA ID (or 'back' to return): ").strip()
+    
+    if query.lower() == 'back' or not query:
+        return
+    
+    # Check if it's an RA ID (numeric)
+    if query.isdigit():
+        ra_id = int(query)
+        print(f"\nLooking up RA ID: {ra_id}...")
+        
+        async with aiohttp.ClientSession() as session:
+            # Fetch game info from RA
+            url = f"{RA_API_BASE}/API_GetGame.php"
+            params = {'y': api_key, 'i': ra_id}
+            
+            async with session.get(url, params=params) as resp:
+                if resp.status != 200:
+                    print(f"{Colors.RED}Error: Could not fetch game data{Colors.RESET}")
+                    return
+                data = await resp.json()
+            
+            if not data or not data.get('Title'):
+                print(f"{Colors.RED}Error: Game not found with ID {ra_id}{Colors.RESET}")
+                return
+            
+            title = data['Title']
+            system = data.get('ConsoleName', 'Unknown')
+            points = data.get('points_total', 0)
+            achievements = data.get('achievements_published', 0)
+            
+            print(f"\nFound: {title} ({system})")
+            print(f"  Achievements: {achievements} | Points: {points}")
+            
+            # Get RA progression data
+            ra_result = await fetch_game_progression(session, api_key, ra_id)
+        
+        # Search HLTB
+        print(f"  Searching HLTB...")
+        hltb_result = await search_game(title, system)
+        
+    else:
+        # Search by name
+        title = query
+        print(f"\nSearching for: {title}...")
+        
+        # Search HLTB first
+        hltb_result = await search_game(title, None)
+        ra_result = {}
+    
+    # Display results
+    print("\n" + "-" * 50)
+    print(f"Results for: {title}")
+    print("-" * 50)
+    
+    if hltb_result.get('hltb_name'):
+        match_note = ""
+        if hltb_result.get('comment'):
+            match_note = f" ({Colors.ORANGE}{hltb_result['comment']}{Colors.RESET})"
+        print(f"\nHLTB Match: {hltb_result['hltb_name']}{match_note}")
+        if hltb_result.get('beat'):
+            print(f"  Beat: {hltb_result['beat']} hours")
+        if hltb_result.get('complete'):
+            print(f"  Completionist: {hltb_result['complete']} hours")
+    else:
+        print(f"\n{Colors.RED}No HLTB match found{Colors.RESET}")
+    
+    if ra_result.get('ra_master_time'):
+        print(f"\nRA Player Data:")
+        if ra_result.get('ra_beat_time'):
+            print(f"  Median Beat: {ra_result['ra_beat_time']} hours")
+        print(f"  Median Mastery: {ra_result['ra_master_time']} hours")
+        if ra_result.get('distinct_players'):
+            print(f"  Distinct Players: {ra_result['distinct_players']:,}")
+    
+    input("\nPress Enter to continue...")
+
+
+def show_backlog_summary(output_path: Path):
+    """Display summary statistics from existing Excel file."""
+    print("\n" + "=" * 70)
+    print("Backlog Summary")
+    print("=" * 70)
+    
+    if not output_path.exists():
+        print(f"\n{Colors.RED}No data file found at {output_path}{Colors.RESET}")
+        print("Run a scan first to generate data.")
+        input("\nPress Enter to continue...")
+        return
+    
+    df = pd.read_excel(output_path)
+    
+    # Ensure numeric columns
+    for col in ['RA_Master', 'HLTB_Complete', 'HLTB_Beat', 'Points', 'Points_Per_Hour']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    print(f"\nTotal games: {len(df)}")
+    print(f"Games with RA mastery data: {df['RA_Master'].notna().sum()}")
+    print(f"Games with HLTB data: {df['HLTB_Beat'].notna().sum()}")
+    
+    if df['RA_Master'].notna().any():
+        total_hours = df['RA_Master'].sum()
+        avg_hours = df['RA_Master'].mean()
+        print(f"\nRA Mastery Time:")
+        print(f"  Total: {total_hours:,.1f} hours ({total_hours/24:,.1f} days)")
+        print(f"  Average: {avg_hours:.1f} hours per game")
+    
+    if df['Points'].notna().any():
+        total_points = df['Points'].sum()
+        print(f"\nTotal Points Available: {total_points:,}")
+    
+    # Games by system
+    print(f"\nGames by System:")
+    for system, count in df.groupby('System').size().sort_values(ascending=False).head(10).items():
+        system_hours = df[df['System'] == system]['RA_Master'].sum()
+        if pd.notna(system_hours) and system_hours > 0:
+            print(f"  {system}: {count} games ({system_hours:.1f}h)")
+        else:
+            print(f"  {system}: {count} games")
+    
+    # Top 5 longest games
+    if df['RA_Master'].notna().any():
+        print(f"\nTop 5 Longest Games (by RA Mastery):")
+        longest = df[df['RA_Master'].notna()].nlargest(5, 'RA_Master')
+        for _, row in longest.iterrows():
+            print(f"  {row['RA_Master']:.1f}h - {row['Title']}")
+    
+    # Top 5 most efficient
+    if df['Points_Per_Hour'].notna().any():
+        print(f"\nTop 5 Most Efficient (points per hour):")
+        efficient = df[df['Points_Per_Hour'].notna()].nlargest(5, 'Points_Per_Hour')
+        for _, row in efficient.iterrows():
+            print(f"  {row['Points_Per_Hour']:.1f} pts/hr - {row['Title']}")
+    
+    input("\nPress Enter to continue...")
+
+
+def estimate_completion_time(output_path: Path):
+    """Estimate how long it will take to complete the backlog."""
+    print("\n" + "=" * 70)
+    print("Completion Time Estimator")
+    print("=" * 70)
+    
+    if not output_path.exists():
+        print(f"\n{Colors.RED}No data file found at {output_path}{Colors.RESET}")
+        print("Run a scan first to generate data.")
+        input("\nPress Enter to continue...")
+        return
+    
+    df = pd.read_excel(output_path)
+    df['RA_Master'] = pd.to_numeric(df['RA_Master'], errors='coerce')
+    
+    total_hours = df['RA_Master'].sum()
+    
+    if pd.isna(total_hours) or total_hours == 0:
+        print(f"\n{Colors.RED}No mastery time data available{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    print(f"\nTotal backlog: {total_hours:,.1f} hours ({len(df)} games)")
+    
+    try:
+        hours_per_week = float(input("\nHow many hours per week can you play? ").strip())
+        if hours_per_week <= 0:
+            print("Please enter a positive number.")
+            input("\nPress Enter to continue...")
+            return
+    except ValueError:
+        print("Invalid number.")
+        input("\nPress Enter to continue...")
+        return
+    
+    weeks = total_hours / hours_per_week
+    years = weeks / 52
+    
+    print(f"\n" + "-" * 50)
+    print(f"At {hours_per_week} hours per week:")
+    print(f"  Weeks to complete: {weeks:,.1f}")
+    print(f"  Months to complete: {weeks/4.33:,.1f}")
+    print(f"  Years to complete: {years:,.2f}")
+    
+    from datetime import datetime, timedelta
+    completion_date = datetime.now() + timedelta(weeks=weeks)
+    print(f"\n  Estimated completion: {completion_date.strftime('%B %Y')}")
+    
+    if years > 5:
+        print(f"\n  {Colors.ORANGE}That's a lot of gaming! Maybe prioritize by efficiency?{Colors.RESET}")
+    elif years > 1:
+        print(f"\n  {Colors.ORANGE}A solid multi-year project!{Colors.RESET}")
+    else:
+        print(f"\n  {Colors.GREEN}Very achievable!{Colors.RESET}")
+    
+    input("\nPress Enter to continue...")
+
+
+async def run_scan(username: str, api_key: str, output_path: Path, fresh: bool = False, 
+                   systems_filter: list = None, systems_exclude: list = None):
+    """Run a scan (update or fresh)."""
+    print("\n" + "=" * 70)
     print("RetroAchievements + HowLongToBeat Scraper")
     print("=" * 70)
     
-    if output_path.exists() and not args.refresh:
+    if not fresh and output_path.exists():
         print(f"\nFound existing {output_path}")
         print("Loading and checking for new games...")
         df = pd.read_excel(output_path)
         
-        ra_games = await fetch_want_to_play_list(username, api_key, use_cache=not args.refresh)
+        ra_games = await fetch_want_to_play_list(username, api_key, use_cache=False)
         ra_df = convert_ra_to_dataframe(ra_games)
         
         existing_ids = set(df['RA_ID'].dropna().astype(int)) if 'RA_ID' in df.columns else set()
@@ -900,11 +1122,243 @@ async def main_async(args):
         if not ra_games:
             print("No games found in Want to Play list!")
             print("Make sure your Want to Play list is accessible.")
-            sys.exit(1)
+            return
         
         df = convert_ra_to_dataframe(ra_games)
     
+    # Apply system filters
+    if systems_filter:
+        df = df[df['System'].isin(systems_filter)]
+        print(f"Filtered to systems: {', '.join(systems_filter)} ({len(df)} games)")
+    
+    if systems_exclude:
+        df = df[~df['System'].isin(systems_exclude)]
+        print(f"Excluded systems: {', '.join(systems_exclude)} ({len(df)} games remaining)")
+    
+    if len(df) == 0:
+        print("No games to process after filtering!")
+        return
+    
     await process_games(df, output_path, api_key)
+
+
+def get_system_selection(df_or_path, mode='filter'):
+    """Let user select systems to filter or exclude."""
+    if isinstance(df_or_path, Path):
+        if not df_or_path.exists():
+            return None
+        df = pd.read_excel(df_or_path)
+    else:
+        df = df_or_path
+    
+    systems = df['System'].value_counts()
+    
+    print(f"\nAvailable systems:")
+    system_list = list(systems.items())
+    for i, (system, count) in enumerate(system_list, 1):
+        print(f"  {i}. {system} ({count} games)")
+    
+    action = "include" if mode == 'filter' else "exclude"
+    print(f"\nEnter numbers to {action} (comma-separated), or 'all' for all, or 'back' to cancel:")
+    
+    selection = input("> ").strip().lower()
+    
+    if selection == 'back' or not selection:
+        return None
+    
+    if selection == 'all':
+        return [s for s, _ in system_list]
+    
+    try:
+        indices = [int(x.strip()) - 1 for x in selection.split(',')]
+        selected = [system_list[i][0] for i in indices if 0 <= i < len(system_list)]
+        return selected if selected else None
+    except (ValueError, IndexError):
+        print("Invalid selection")
+        return None
+
+
+def export_to_csv(output_path: Path):
+    """Export Excel data to CSV."""
+    if not output_path.exists():
+        print(f"\n{Colors.RED}No data file found at {output_path}{Colors.RESET}")
+        input("\nPress Enter to continue...")
+        return
+    
+    csv_path = output_path.with_suffix('.csv')
+    df = pd.read_excel(output_path)
+    df.to_csv(csv_path, index=False)
+    print(f"\n{Colors.GREEN}Exported to: {csv_path}{Colors.RESET}")
+    input("\nPress Enter to continue...")
+
+
+def print_menu(username: str = None):
+    """Print the main menu."""
+    print("\n" + "=" * 70)
+    print("  RA Backlog Timer - Main Menu")
+    print("=" * 70)
+    
+    if username:
+        print(f"  Logged in as: {Colors.GREEN}{username}{Colors.RESET}")
+    else:
+        print(f"  {Colors.ORANGE}Not logged in{Colors.RESET}")
+    
+    print("\n  SCANNING")
+    print("    1. Update scan (check for new games)")
+    print("    2. Fresh scan (re-fetch everything)")
+    print("    3. Scan specific systems only")
+    print("    4. Scan excluding specific systems")
+    
+    print("\n  TOOLS")
+    print("    5. Look up single game")
+    print("    6. View backlog summary")
+    print("    7. Estimate completion time")
+    print("    8. Export to CSV")
+    
+    print("\n  ACCOUNT")
+    print("    9. View username")
+    print("   10. Clear cached credentials")
+    
+    print("\n    0. Exit")
+    print("=" * 70)
+
+
+async def interactive_menu(output_path: Path):
+    """Run the interactive menu."""
+    username = None
+    api_key = None
+    
+    # Try to load existing credentials
+    creds = CredentialManager.get_credentials()
+    if creds and creds[0] and creds[1]:
+        username, api_key = creds
+    
+    while True:
+        print_menu(username)
+        
+        choice = input("\nEnter choice: ").strip()
+        
+        if choice == '0':
+            print("\nGoodbye!")
+            break
+        
+        elif choice == '1':
+            # Update scan
+            if not username:
+                username, api_key = get_credentials()
+            await run_scan(username, api_key, output_path, fresh=False)
+        
+        elif choice == '2':
+            # Fresh scan
+            if not username:
+                username, api_key = get_credentials()
+            
+            # Warn about what will be deleted/overwritten
+            files_to_clear = []
+            progress_path = Path(PROGRESS_FILE)
+            ra_cache_path = Path(RA_CACHE_FILE)
+            
+            if progress_path.exists():
+                files_to_clear.append(f"  - {PROGRESS_FILE} (HLTB lookup cache)")
+            if ra_cache_path.exists():
+                files_to_clear.append(f"  - {RA_CACHE_FILE} (RA game list cache)")
+            if output_path.exists():
+                files_to_clear.append(f"  - {output_path} (will be overwritten)")
+            
+            if files_to_clear:
+                print(f"\n{Colors.ORANGE}WARNING: Fresh scan will delete/overwrite:{Colors.RESET}")
+                for f in files_to_clear:
+                    print(f)
+                confirm = input("\nAre you sure? (y/n): ").strip().lower()
+                if confirm != 'y':
+                    print("Cancelled.")
+                    continue
+                
+                # Clear the cache files
+                if progress_path.exists():
+                    progress_path.unlink()
+                if ra_cache_path.exists():
+                    ra_cache_path.unlink()
+                print("Cache files cleared.")
+            
+            await run_scan(username, api_key, output_path, fresh=True)
+        
+        elif choice == '3':
+            # Scan specific systems
+            if not username:
+                username, api_key = get_credentials()
+            
+            # Need to fetch game list first to show systems
+            ra_games = await fetch_want_to_play_list(username, api_key, use_cache=True)
+            temp_df = convert_ra_to_dataframe(ra_games)
+            
+            systems = get_system_selection(temp_df, mode='filter')
+            if systems:
+                await run_scan(username, api_key, output_path, fresh=False, systems_filter=systems)
+        
+        elif choice == '4':
+            # Scan excluding systems
+            if not username:
+                username, api_key = get_credentials()
+            
+            ra_games = await fetch_want_to_play_list(username, api_key, use_cache=True)
+            temp_df = convert_ra_to_dataframe(ra_games)
+            
+            systems = get_system_selection(temp_df, mode='exclude')
+            if systems:
+                await run_scan(username, api_key, output_path, fresh=False, systems_exclude=systems)
+        
+        elif choice == '5':
+            # Single game lookup
+            if not username:
+                username, api_key = get_credentials()
+            await lookup_single_game(api_key)
+        
+        elif choice == '6':
+            # Backlog summary
+            show_backlog_summary(output_path)
+        
+        elif choice == '7':
+            # Completion estimate
+            estimate_completion_time(output_path)
+        
+        elif choice == '8':
+            # Export to CSV
+            export_to_csv(output_path)
+        
+        elif choice == '9':
+            # View username
+            if username:
+                print(f"\n  Current username: {Colors.GREEN}{username}{Colors.RESET}")
+            else:
+                print(f"\n  {Colors.ORANGE}No credentials stored{Colors.RESET}")
+            input("\nPress Enter to continue...")
+        
+        elif choice == '10':
+            # Clear credentials
+            confirm = input("\nClear stored credentials? (y/n): ").strip().lower()
+            if confirm == 'y':
+                CredentialManager.clear_credentials()
+                username = None
+                api_key = None
+                print(f"{Colors.GREEN}Credentials cleared.{Colors.RESET}")
+            input("\nPress Enter to continue...")
+        
+        else:
+            print(f"\n{Colors.RED}Invalid choice{Colors.RESET}")
+
+
+async def main_async(args):
+    """Main async entry point."""
+    output_path = Path(args.output)
+    
+    if args.menu or (not args.refresh and not args.reset_creds and not hasattr(args, 'run_direct')):
+        # Interactive menu mode
+        await interactive_menu(output_path)
+    else:
+        # Direct execution mode (legacy CLI)
+        username, api_key = get_credentials(reset=args.reset_creds)
+        await run_scan(username, api_key, output_path, fresh=args.refresh)
 
 
 def main():
@@ -917,8 +1371,18 @@ def main():
                         help='Re-fetch Want to Play list from RetroAchievements')
     parser.add_argument('--reset-creds', action='store_true',
                         help='Clear stored credentials and prompt again')
+    parser.add_argument('--menu', action='store_true',
+                        help='Show interactive menu (default behavior)')
+    parser.add_argument('--no-menu', action='store_true',
+                        help='Run scan directly without menu')
     
     args = parser.parse_args()
+    
+    # If --no-menu is specified, mark for direct run
+    if args.no_menu:
+        args.run_direct = True
+        args.menu = False
+    
     asyncio.run(main_async(args))
 
 
