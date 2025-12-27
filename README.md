@@ -2,7 +2,9 @@
 
 A Python tool that syncs your RetroAchievements "Want to Play" list with completion time data from both HowLongToBeat and RetroAchievements player statistics.
 
-Plan your retro gaming backlog with accurate time estimates for both casual playthroughs and full mastery.
+Plan your retro gaming backlog with accurate time estimates for both casual playthroughs and full mastery. 
+
+**Note: This is rate limited to not overload RA or HLTB servers**
 
 ## Time Data Sources
 
