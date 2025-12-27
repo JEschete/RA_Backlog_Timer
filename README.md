@@ -104,7 +104,6 @@ Your RetroAchievements API key is sensitive and should be protected.
 **Without keyring:**
 - Credentials are stored in `.ra_credentials.json` in the working directory
 - File permissions are set to 600 (owner read/write only) on Unix systems
-- Consider adding this file to your `.gitignore`
 
 ### API Key Safety
 
