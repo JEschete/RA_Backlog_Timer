@@ -49,6 +49,13 @@ RA_CACHE_FILE = 'ra_wanttoplay_cache.json'
 CREDS_FILE = '.ra_credentials.json'  # Fallback if keyring unavailable
 KEYRING_SERVICE = 'RAHLTBScraper'
 
+# ANSI color codes for terminal output
+class Colors:
+    RED = '\033[91m'
+    ORANGE = '\033[93m'
+    GREEN = '\033[92m'
+    RESET = '\033[0m'
+
 # Regex patterns for title normalization
 import re
 
@@ -703,14 +710,18 @@ async def process_games(df: pd.DataFrame, excel_path: Path, api_key: str):
                 if ra_result.get('ra_master_time'):
                     parts.append(f"RA Master: {ra_result['ra_master_time']}h")
                 
-                sim_warn = ""
-                if hltb_result['hltb_name'] and hltb_result['similarity'] < 0.6:
-                    sim_warn = " ⚠️"
-                
                 match_name = hltb_result.get('hltb_name', 'N/A')
-                print(f"→ {match_name}{sim_warn} [{', '.join(parts) if parts else 'No times'}]")
+                times_str = f"[{', '.join(parts)}]" if parts else '[No times]'
+                
+                # Color based on match quality
+                if hltb_result['hltb_name'] and hltb_result['similarity'] < 0.6:
+                    # Orange for low confidence matches
+                    print(f"→ {Colors.ORANGE}{match_name}{Colors.RESET} {times_str}")
+                else:
+                    print(f"→ {match_name} {times_str}")
             else:
-                print(f"✗ {hltb_result['error'] or 'No data'}")
+                # Red for no match
+                print(f"{Colors.RED}✗ {hltb_result['error'] or 'No data'}{Colors.RESET}")
             
             updated += 1
             await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
