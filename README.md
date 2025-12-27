@@ -25,11 +25,13 @@ As a result, the time to master a game on RetroAchievements can be significantly
 
 - Pulls your Want to Play list directly from the RetroAchievements API
 - Fetches beat and completionist times from HowLongToBeat
+- **Efficiency metric** (points per hour) to prioritize your backlog
 - GUI login dialog with secure credential storage
 - Progress caching (safe to interrupt and resume)
+- Aggressive title normalization for better HLTB matching
 - Fuzzy match detection with quality indicators
 - Exports to Excel with all data and match notes
-- Automatic handling of RA-specific title prefixes (~Hack~, ~Homebrew~, etc.)
+- Handles RA-specific tags (~Hack~, [Subset], region codes, etc.)
 
 ## Installation
 
@@ -83,7 +85,16 @@ The tool creates an Excel file with the following columns:
 | RA_ID | RetroAchievements game ID |
 | Beat | Main story completion time (hours) |
 | Complete | 100% completion time (hours) |
+| Points_Per_Hour | Efficiency metric (Points / Complete time) |
 | Comments | Match quality notes (see below) |
+
+### Efficiency Metric
+
+The `Points_Per_Hour` column helps you prioritize your backlog by showing which games give you the most RetroAchievements points for your time investment.
+
+**Higher values = more "rewarding" games**
+
+Sort by this column descending to find quick wins that will boost your RA rank efficiently. This is calculated as `Points / Complete time` (or Beat time if Complete is unavailable).
 
 ### Match Quality
 
