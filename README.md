@@ -4,6 +4,23 @@ A Python tool that syncs your RetroAchievements "Want to Play" list with HowLong
 
 Plan your retro gaming backlog by seeing how long each game takes to beat and 100% complete.
 
+## Important Note
+
+**These times are NOT RetroAchievements mastery times.**
+
+HowLongToBeat tracks how long it takes to *play through* a game, not how long it takes to earn all achievements. RetroAchievements sets often include challenges that go far beyond a normal playthrough, such as:
+
+- No-damage runs
+- Speedrun challenges
+- Collectible hunts with no in-game tracking
+- Multiple playthroughs on different difficulties
+- Challenge modes and post-game content
+- Missable achievements requiring careful planning
+
+As a result, the time to master a game on RetroAchievements can be significantly longer (sometimes 2-5x or more) than the HLTB completionist time.
+
+**This tool provides a general estimate of base game length to help you plan your backlog.** Actual mastery time will vary based on the achievement set difficulty, your familiarity with the game, and your skill level.
+
 ## Features
 
 - Pulls your Want to Play list directly from the RetroAchievements API
@@ -35,7 +52,7 @@ Note: `keyring` is optional but recommended for secure credential storage. Witho
 ### Basic usage
 
 ```bash
-python retro_hltb.py
+python ra_backlog_timer.py
 ```
 
 On first run, a login dialog will appear asking for your RetroAchievements username and API key. These are saved securely for future runs.
@@ -44,13 +61,13 @@ On first run, a login dialog will appear asking for your RetroAchievements usern
 
 ```bash
 # Specify output file
-python retro_hltb.py -o MyBacklog.xlsx
+python ra_backlog_timer.py -o MyBacklog.xlsx
 
 # Re-fetch your Want to Play list from RetroAchievements
-python retro_hltb.py --refresh
+python ra_backlog_timer.py --refresh
 
 # Clear stored credentials and enter new ones
-python retro_hltb.py --reset-creds
+python ra_backlog_timer.py --reset-creds
 ```
 
 ### Output
