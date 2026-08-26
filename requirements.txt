@@ -1,0 +1,18 @@
+# RA Backlog Timer - runtime dependencies
+# Python 3.10+  |  install: pip install -r requirements.txt
+
+# HowLongToBeat lookups
+howlongtobeatpy>=1.0.23
+
+# RetroAchievements API calls (async)
+aiohttp>=3.9.0
+
+# Spreadsheet read/write
+pandas>=2.0.0
+openpyxl>=3.1.0        # required by pandas for .xlsx read_excel/to_excel
+
+# Secure credential storage (optional - falls back to a local JSON file)
+keyring>=24.0.0
+
+# NOTE: tkinter is part of the Python standard library, but on Linux it ships
+# separately (e.g. apt install python3-tk). It is not pip-installable.
