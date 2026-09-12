@@ -1,281 +1,272 @@
 # RA_Backlog_Timer
 
-A Python tool that syncs your RetroAchievements "Want to Play" list with completion time data from both HowLongToBeat and RetroAchievements player statistics.
+Syncs your RetroAchievements **Want to Play** list with completion times from both HowLongToBeat and RetroAchievements player statistics, then helps you decide what to actually play next.
 
-Plan your retro gaming backlog with accurate time estimates for both casual playthroughs and full mastery. 
+Runs as a browser dashboard, a terminal menu, or a headless command — same data, same database.
 
-**Note: This is rate limited to not overload RA or HLTB servers**
+**Rate limited by design** so it doesn't hammer RA or HLTB.
 
-## Time Data Sources
+## Time data sources
 
-This tool pulls timing data from **two sources**:
+| Source | Columns | What it measures |
+|--------|---------|------------------|
+| **RetroAchievements** | `RA_Beat`, `RA_Master`, `RA_Beat_HC`, `RA_Master_HC` | Median times from RA players actually earning achievements |
+| **HowLongToBeat** | `HLTB_Beat`, `HLTB_Complete` | General playthrough times, not achievement-focused |
 
-| Source | Data | What it measures |
-|--------|------|------------------|
-| **RetroAchievements** | RA_Beat, RA_Master | Actual median times from RA players earning achievements |
-| **HowLongToBeat** | HLTB_Beat, HLTB_Complete | General playthrough times (not achievement-focused) |
+**RA mastery times are authoritative** — they come from real player data and reflect what it takes to earn every achievement, including challenge runs, collectibles and repeat playthroughs. The `_HC` columns are the hardcore-mode equivalents.
 
-**RA Mastery times are authoritative** - they come from actual player data and reflect how long it takes to earn all achievements, including challenge runs, collectibles, and multiple playthroughs.
-
-HLTB times are useful as a baseline comparison but typically underestimate mastery time by 2-5x depending on the achievement set difficulty.
+HLTB times are a useful baseline but typically underestimate mastery by 2–5× depending on the achievement set.
 
 ## Features
 
-- Pulls your Want to Play list directly from the RetroAchievements API
-- Fetches **actual RA mastery times** from player statistics (API_GetGameProgression)
+- Pulls your Want to Play list straight from the RetroAchievements API
+- Fetches real RA mastery times (`API_GetGameProgression`), softcore and hardcore
 - Fetches beat and completionist times from HowLongToBeat for comparison
-- **Efficiency metric** (points per hour) to prioritize your backlog
-- **Smart title matching** for better HLTB results
-- GUI login dialog with secure credential storage
-- Progress caching (safe to interrupt and resume)
-- Exports to Excel with all data and match notes
-
-### Smart Title Matching
-
-The HLTB search uses intelligent matching to handle RetroAchievements naming conventions:
-
-- **Pokemon handling**: Normalizes `é` to `e`, strips "Version" suffix
-- **Alternate titles**: Searches both sides of pipe separators (e.g., `HeartGold | SoulSilver`)
-- **Sequel detection**: Penalizes numbered sequels when searching for the original (prevents `Aladdin` matching `Aladdin III`)
-- **Title cleanup**: Removes `~Hack~`, `[Subset]`, region codes `(USA)`, version info `(Rev 1)`, etc.
-- **Special characters**: Normalizes `ō` to `o` (Okami), `ü` to `u`, and other diacritics
+- Tracks achievements you've **already earned**, so estimates are time *remaining*, not time from scratch
+- **Points per hour** efficiency metric to prioritise the backlog
+- **Session planner** — "what's the most points I can earn in 20 hours?" (exact knapsack, not a greedy guess)
+- Smart title matching tuned for RetroAchievements naming
+- Resumable: interrupt any scan and pick up where you left off
+- Exports a formatted Excel workbook or CSV
 
 ## Installation
 
 ### Requirements
 
-- Python 3.10 or higher
+- Python 3.10 or newer
 - A RetroAchievements account with a Want to Play list
-- Your RA API key (get it from [retroachievements.org/settings](https://retroachievements.org/settings))
+- An RA API key from [retroachievements.org/settings](https://retroachievements.org/settings)
 
-### Install dependencies
+### Install
 
 ```bash
-pip install howlongtobeatpy pandas openpyxl aiohttp keyring
+git clone https://github.com/JEschete/RA_Backlog_Timer
+cd RA_Backlog_Timer
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+# source .venv/bin/activate     # macOS / Linux
+pip install -e .
 ```
 
-Note: `keyring` is optional but recommended for secure credential storage. Without it, credentials are stored in a local file.
+That gives you the `ra-backlog` command. If you'd rather not install the package:
+
+```bash
+pip install -r requirements.txt
+python ra_backlog_timer.py
+```
+
+On Linux, tkinter ships separately and is needed for the first-run credential prompt: `sudo apt install python3-tk`.
 
 ## Usage
 
-### Basic usage
+### Browser dashboard (default)
 
 ```bash
-python ra_backlog_timer.py
+ra-backlog
 ```
 
-On first run, a login dialog will appear asking for your RetroAchievements username and API key. These are saved securely for future runs.
-
-### Command line options
+Opens `http://127.0.0.1:8000` in your browser. From there you can run scans with live progress, sort and filter the whole backlog, run the planner, and export. Everything stays on your machine — the server binds to localhost only.
 
 ```bash
-# Specify output file
-python ra_backlog_timer.py -o MyBacklog.xlsx
-
-# Re-fetch your Want to Play list from RetroAchievements
-python ra_backlog_timer.py --refresh
-
-# Clear stored credentials and enter new ones
-python ra_backlog_timer.py --reset-creds
+ra-backlog web --port 9000 --no-browser
 ```
 
-### Sample Terminal Output
+### Terminal menu
 
-```
-======================================================================
-RetroAchievements + HowLongToBeat Scraper
-======================================================================
-Fetching Want to Play list for 'USER' from RetroAchievements...
-  Fetched 345/345 games...
-  Total: 345 games in Want to Play list
-
-Processing 345 games...
-
-Complete!
-  Total games: 345
-  From cache: 0
-  Fetched: 345
-  Skipped (already had data): 0
-  Games with HLTB data: 338
-  Games with RA mastery data: 334
-
-HLTB Match quality:
-  Exact matches: 299
-  Fuzzy matches: 11
-  Loose matches: 2
-  Poor matches (needs review): 21
-  No match found: 5
-
-RA vs HLTB Comparison (323 games with both):
-  Avg HLTB Completionist: 48.7 hours
-  Avg RA Mastery: 42.9 hours
-  RA takes 0.9x longer on average
-
-RA Mastery Time estimates:
-  Total Mastery time: 14393.9 hours (599.7 days)
-  Average Mastery: 43.1 hours
-
-Games by system:
-  PlayStation 2: 83
-  PlayStation: 53
-  SNES/Super Famicom: 45
-  PlayStation Portable: 26
-  Game Boy Advance: 24
-  Nintendo 64: 23
-  Nintendo DS: 23
-  Genesis/Mega Drive: 21
-  NES/Famicom: 17
-  GameCube: 14
-
-Most Efficient Games (highest points per hour of mastery):
-  135.2 pts/hr - Golden Axe (284 pts, 2.1h RA)
-  115.6 pts/hr - Mighty Morphin Power Rangers: The Movie (416 pts, 3.6h RA)
-  92.3 pts/hr - Alien Soldier (323 pts, 3.5h RA)
-  88.3 pts/hr - Altered Beast (318 pts, 3.6h RA)
-  85.7 pts/hr - The Adventures of Batman & Robin (240 pts, 2.8h RA)
-  80.9 pts/hr - Castlevania: The Adventure (445 pts, 5.5h RA)
-  77.9 pts/hr - Streets of Rage (740 pts, 9.5h RA)
-  75.6 pts/hr - Aladdin (295 pts, 3.9h RA)
-  69.0 pts/hr - Streets of Rage 2 (331 pts, 4.8h RA)
-  66.7 pts/hr - Alien 3 (360 pts, 5.4h RA)
-
-Results saved to: HowLongToBeat.xlsx
-
-Games without any time data (1):
-  - SaGa Frontier II
+```bash
+ra-backlog menu
 ```
 
-### Output
+Numbered menu covering scans, summary, planner, exports and credentials.
 
-The tool creates an Excel file with the following columns:
+### Headless
+
+```bash
+ra-backlog scan                              # update: fetch what's missing
+ra-backlog scan --fresh                      # re-check everything
+ra-backlog scan --systems "Nintendo 64" SNES/Super Famicom
+ra-backlog scan --exclude "PlayStation 2"
+ra-backlog scan --no-user-progress           # skip earned-achievement lookup
+
+ra-backlog export --format xlsx -o MyBacklog.xlsx
+ra-backlog export --format csv
+
+ra-backlog credentials                       # set or replace
+ra-backlog credentials --clear
+```
+
+Global flags: `--db PATH`, `-v/--verbose`, `-q/--quiet`, `--log-file PATH`.
+
+### Terminal summary
+
+```
+  Games:                345
+  With HLTB data:       338
+  With RA mastery data: 334
+  Without time data:    1
+  Total mastery time:   15226.9 h (634.5 days)
+  Average per game:     44.3 h
+
+  Most efficient games:
+      135.2 pts/hr  Golden Axe (284 pts, 2.1h)
+      115.6 pts/hr  Mighty Morphin Power Rangers: The Movie (416 pts, 3.6h)
+       92.3 pts/hr  Alien Soldier (323 pts, 3.5h)
+```
+
+### Session planner
+
+Given the hours you actually have, it picks the set of games maximising achievement points — solved exactly rather than by sorting on efficiency and taking the top N, which gets the answer wrong whenever a slightly-less-efficient game fits the remaining time better.
+
+```
+  Hours available: 20
+
+  1799 points in 19.5 h  (92.3 pts/hr)
+
+       2.1h    284p  Golden Axe
+       3.6h    416p  Mighty Morphin Power Rangers: The Movie
+       3.5h    323p  Alien Soldier
+       5.5h    445p  Castlevania: The Adventure
+       4.8h    331p  Streets of Rage 2
+```
+
+Note that this isn't simply the top five by efficiency — `Castlevania: The Adventure` (80.9 pts/hr) and `Streets of Rage 2` (69.0) are chosen over higher-ranked games because they pack more points into the hours left over. That's the difference between solving the problem and sorting a column.
+
+## Output columns
+
+Excel and CSV exports contain:
 
 | Column | Description |
 |--------|-------------|
-| Title | Game title from RetroAchievements |
-| System | Console/platform |
-| Achievements | Number of achievements available |
-| Points | Total achievement points |
-| RA_ID | RetroAchievements game ID |
-| HLTB_Beat | HowLongToBeat main story time (hours) |
-| HLTB_Complete | HowLongToBeat completionist time (hours) |
-| RA_Beat | RetroAchievements median time to beat (hours) |
-| RA_Master | RetroAchievements median time to master (hours) |
-| RA_Players | Number of distinct players on RetroAchievements |
-| Points_Per_Hour | Efficiency metric (Points / RA_Master time) |
-| Comments | HLTB match quality notes |
+| `Title` | Game title from RetroAchievements |
+| `System` | Console / platform |
+| `Achievements` | Achievements published |
+| `Earned` | Achievements you've already earned |
+| `Points` | Total achievement points |
+| `RA_ID` | RetroAchievements game ID |
+| `HLTB_Beat` | HowLongToBeat main story (hours) |
+| `HLTB_Complete` | HowLongToBeat completionist (hours) |
+| `RA_Beat` | RA median time to beat (hours) |
+| `RA_Master` | RA median time to master (hours) |
+| `RA_Beat_HC` | RA median time to beat, hardcore |
+| `RA_Master_HC` | RA median time to master, hardcore |
+| `RA_Players` | Distinct players on RA |
+| `Points_Per_Hour` | Efficiency metric |
+| `Remaining_Hours` | Estimated time left, scaled by what you've already earned |
+| `Match_Quality` | `exact` / `fuzzy` / `loose` / `poor` / `none` |
+| `HLTB_Name` | The HowLongToBeat entry that matched |
 
-### Efficiency Metric
+The workbook ships with a frozen header, autofilter, a colour scale on `Points_Per_Hour`, and a **Summary** sheet with totals and a per-system breakdown.
 
-The `Points_Per_Hour` column helps you prioritize your backlog by showing which games give you the most RetroAchievements points for your time investment.
+### Efficiency metric
 
-**Higher values = more "rewarding" games**
+`Points_Per_Hour` = points ÷ mastery time. Higher means more RA points per hour of your life.
 
-This is calculated using RA_Master time when available (actual player data), falling back to HLTB_Complete if RA data is missing.
+It prefers `RA_Master` (real player data) and falls back to `HLTB_Complete`, then `HLTB_Beat`. Sort descending to find quick wins.
 
-Sort by this column descending to find quick wins that will boost your RA rank efficiently.
+### Match quality
 
-### HLTB Match Quality
+| Value | Meaning |
+|-------|---------|
+| `exact` | Title matched exactly |
+| `fuzzy` | High confidence, minor differences |
+| `loose` | Moderate confidence — worth a look |
+| `poor` | Low confidence — verify manually |
+| `none` | Not found on HowLongToBeat |
 
-The Comments column indicates how well the game matched on HowLongToBeat:
+### Smart title matching
 
-| Comment | Meaning |
-|---------|---------|
-| *(empty)* | Exact title match |
-| `Fuzzy match: [name]` | High confidence match with minor differences |
-| `Loose match (X%): [name]` | Moderate confidence, worth verifying |
-| `Poor match (X%): [name] - VERIFY` | Low confidence, needs manual review |
-| `No HLTB match found` | Game not found in HowLongToBeat database |
+RetroAchievements names games differently from HowLongToBeat, so titles are normalised before searching:
 
-## Files Created
+- **Articles**: RA alphabetises as `Legend of Zelda, The: A Link to the Past`. The article is moved to the front, including when it sits before a subtitle colon.
+- **Tags**: strips `~Hack~`, `~Homebrew~`, `~Prototype~`, `[Subset - Bonus]`, `[T+Eng]`
+- **Region and version**: `(USA)`, `(Europe)`, `(En,Fr,De)`, `(Rev 1)`, `(v1.1)`, `(Disc 1)`
+- **Diacritics**: full Unicode folding, so `Pokémon` → `Pokemon`, `Ōkami` → `Okami`
+- **Alternate titles**: searches both sides of `HeartGold | SoulSilver`
+- **Sequel guard**: searching `Aladdin` won't return `Aladdin III`
+- **Fallbacks**: the pre-subtitle base title is tried last and weighted down, so `Castlevania: Symphony of the Night` can't collapse to plain `Castlevania`
 
-The tool creates several cache files in the working directory:
+## Files
 
-- `HowLongToBeat.xlsx` - Your output file (or custom name via -o)
-- `ra_wanttoplay_cache.json` - Cached Want to Play list from RA
-- `hltb_progress.json` - Lookup progress cache (for resuming)
-- `.ra_credentials.json` - Credentials file (only if keyring unavailable)
+| File | Purpose |
+|------|---------|
+| `backlog.db` | SQLite database — the source of truth |
+| `HowLongToBeat.xlsx` | Generated export (not read back) |
+| `.ra_credentials.json` | Only created when `keyring` is unavailable |
 
-### Re-fetching Data
+Excel is an **output format**, not the database. That means a scan can't be derailed by having the workbook open, and exports are free to be formatted for reading.
 
-To re-run HLTB matching (e.g., after a matching algorithm update):
+### Migrating from an earlier version
+
+Nothing to do. On first run, any existing `HowLongToBeat.xlsx`, `hltb_progress.json` and `ra_wanttoplay_cache.json` are imported into `backlog.db` automatically. The old files are left on disk untouched.
+
+One deliberate exception: cached *failures* in `hltb_progress.json` are not imported, so those games get retried instead of inheriting a stale error.
+
+### Re-running lookups
+
 ```bash
-rm hltb_progress.json
-python ra_backlog_timer.py
+ra-backlog scan --fresh     # re-check every game
 ```
 
-To refresh your Want to Play list from RetroAchievements:
-```bash
-python ra_backlog_timer.py --refresh
-```
+Failed lookups retry themselves after 24 hours. To force them sooner, use option 8 in the terminal menu ("Retry failed lookups").
+
+Removing a game from your RA Want to Play list doesn't delete its data — it's flagged instead, so re-adding it costs no lookups.
 
 ## Security
 
-### Credential Storage
+### Credential storage
 
-Your RetroAchievements API key is sensitive and should be protected.
+**With `keyring` (recommended, installed by default):** credentials go to your OS credential store — Windows Credential Manager, macOS Keychain, or Secret Service on Linux.
 
-**With keyring installed (recommended):**
-- Credentials are stored in your operating system's secure credential storage
-- Windows: Credential Manager
-- macOS: Keychain
-- Linux: Secret Service (GNOME Keyring or KWallet)
+**Without it:** they're written to `.ra_credentials.json` with `600` permissions on Unix. The file is not encrypted.
 
-**Without keyring:**
-- Credentials are stored in `.ra_credentials.json` in the working directory
-- File permissions are set to 600 (owner read/write only) on Unix systems
+If credentials are found in the fallback file while `keyring` is available, they're migrated into the keyring and the file is removed.
 
-### API Key Safety
+### Network requests
 
-- Never commit your API key to version control
-- The `.ra_credentials.json` file is a hidden file but is NOT encrypted
-- If you suspect your API key is compromised, regenerate it at [retroachievements.org/settings](https://retroachievements.org/settings)
+HTTPS to `retroachievements.org` and `howlongtobeat.com`. Nothing else. The web dashboard binds to `127.0.0.1` and is not reachable from your network.
 
-### Network Requests
-
-This tool makes HTTPS requests to:
-- `retroachievements.org` - to fetch your Want to Play list and game progression data
-- `howlongtobeat.com` - to fetch game completion times
-
-No data is sent to any other servers.
+If you think your API key is compromised, regenerate it at [retroachievements.org/settings](https://retroachievements.org/settings).
 
 ## Troubleshooting
 
-### "Invalid API key or unauthorized"
+**"Unauthorized (401)"** — verify your key, then `ra-backlog credentials` to re-enter it. You can only read your own Want to Play list (or a mutual follower's).
 
-- Verify your API key at [retroachievements.org/settings](https://retroachievements.org/settings)
-- Run with `--reset-creds` to re-enter your credentials
-- Make sure you can access your own Want to Play list (must be your account or mutual followers)
+**No games found** — add some games to your Want to Play list, and check you're querying your own username.
 
-### "No games found in Want to Play list"
+**Credential dialog doesn't appear** — needs tkinter (`sudo apt install python3-tk` on Linux). Without a display it falls back to a terminal prompt.
 
-- Add some games to your Want to Play list on RetroAchievements
-- Check that you are querying your own username
+**Missing RA mastery times** — not every game has enough player data for a median. Newer or obscure sets often have none; HLTB times are used as the fallback.
 
-### GUI does not appear
+**Wrong HLTB match** — check `Match_Quality`. Romhacks, subsets and regional variants frequently have no HLTB entry at all. `ra-backlog scan --fresh` re-runs matching after any tuning.
 
-- Make sure you have tkinter installed (included with most Python distributions)
-- On Linux, you may need: `sudo apt install python3-tk`
+**Export says the file is open** — close the workbook in Excel and retry. The scan itself is unaffected; only the export needs the file.
 
-### High DPI display issues
+**Rate limited** — requests retry with exponential backoff automatically. For a gentler scan, lower `MAX_CONCURRENT_REQUESTS` in `ra_backlog/config.py`.
 
-- The dialog should auto-scale on Windows 10/11
-- If text appears too small, try running from a terminal with DPI awareness enabled
+## Development
 
-### Missing RA_Master times
+```
+ra_backlog/
+  matching.py       title normalization + HLTB scoring   (pure, heavily tested)
+  efficiency.py     derived metrics + session planner    (pure)
+  scanner.py        scan orchestration and concurrency
+  storage/          SQLite schema, queries, migration, export
+  clients/          RA API, HLTB, shared retry/backoff
+  cli/              argument parsing, terminal menu, credential dialog
+  web/              FastAPI app, SSE progress, dashboard
+tests/
+```
 
-- Not all games have enough player data for median times
-- Newer or less popular games may not have mastery statistics yet
-- The tool will still show HLTB times as a fallback
+```bash
+pip install -e ".[dev]"
+pytest
+```
 
-### Wrong HLTB match
-
-- Delete `hltb_progress.json` and re-run to get fresh matches
-- Check the Comments column for match quality indicators
-- Some games (especially romhacks, subsets, or regional variants) may not exist on HLTB
+`matching.py` and `efficiency.py` have no I/O, which is what makes them worth testing properly — the test suite covers title normalization against real RetroAchievements naming, the metric fallback chain, planner optimality and budget limits, and the lookup cache's retention rules.
 
 ## Contributing
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+Pull requests welcome. For anything substantial, open an issue first.
 
 ## License
 
@@ -283,6 +274,6 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ## Acknowledgments
 
-- [RetroAchievements](https://retroachievements.org) for the amazing retro gaming community and API
-- [HowLongToBeat](https://howlongtobeat.com) for game completion time data
+- [RetroAchievements](https://retroachievements.org) for the community and the API
+- [HowLongToBeat](https://howlongtobeat.com) for completion time data
 - [howlongtobeatpy](https://github.com/ScrappyCocco/HowLongToBeat-PythonAPI) for the Python HLTB library

@@ -1,18 +1,29 @@
 # RA Backlog Timer - runtime dependencies
 # Python 3.10+  |  install: pip install -r requirements.txt
+#
+# Prefer `pip install -e .` -- pyproject.toml is the source of truth and gives
+# you the `ra-backlog` command. This file mirrors it for the plain-checkout case.
 
-# HowLongToBeat lookups
-howlongtobeatpy>=1.0.23
+# --- data sources ---
+howlongtobeatpy>=1.0.23     # HowLongToBeat lookups
+aiohttp>=3.9.0              # async RetroAchievements API calls
 
-# RetroAchievements API calls (async)
-aiohttp>=3.9.0
-
-# Spreadsheet read/write
+# --- data handling ---
 pandas>=2.0.0
-openpyxl>=3.1.0        # required by pandas for .xlsx read_excel/to_excel
+numpy>=1.24
+openpyxl>=3.1.0             # pandas needs this for .xlsx read/write
 
-# Secure credential storage (optional - falls back to a local JSON file)
-keyring>=24.0.0
+# --- credentials ---
+keyring>=24.0.0             # OS credential store; falls back to a local file
 
-# NOTE: tkinter is part of the Python standard library, but on Linux it ships
-# separately (e.g. apt install python3-tk). It is not pip-installable.
+# --- web dashboard ---
+fastapi>=0.110
+uvicorn[standard]>=0.27
+jinja2>=3.1
+
+# --- tests (optional) ---
+# pytest>=8.0
+# pytest-asyncio>=0.23
+
+# NOTE: tkinter is in the standard library but ships separately on Linux
+# (apt install python3-tk). It is not pip-installable.

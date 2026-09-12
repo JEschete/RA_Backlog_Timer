@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ra-backlog-timer"
+version = "2.0.0"
+description = "Plan your RetroAchievements backlog with real completion times from RA and HowLongToBeat."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "JEschete" }]
+keywords = ["retroachievements", "howlongtobeat", "backlog", "gaming"]
+classifiers = [
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "howlongtobeatpy>=1.0.23",
+    "aiohttp>=3.9.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24",
+    "openpyxl>=3.1.0",
+    "keyring>=24.0.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+ra-backlog = "ra_backlog.cli.args:main"
+
+[project.urls]
+Homepage = "https://github.com/JEschete/RA_Backlog_Timer"
+
+[tool.setuptools.packages.find]
+include = ["ra_backlog*"]
+
+[tool.setuptools.package-data]
+"ra_backlog.web" = ["templates/*.html", "static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+asyncio_mode = "auto"
