@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RA Backlog Timer</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🎮</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">◆</span>
+    <h1>RA Backlog Timer</h1>
+    <span class="user-chip" id="user-chip" hidden></span>
+  </div>
+
+  <!-- Goal / mode: these repoint every number on the page -->
+  <div class="mode-switch" role="group" aria-label="What are you playing for">
+    <div class="seg" id="seg-goal" data-pref="goal">
+      <button data-value="master" class="on">Master</button>
+      <button data-value="beat">Beat</button>
+    </div>
+    <div class="seg" id="seg-mode" data-pref="mode">
+      <button data-value="softcore" class="on">Softcore</button>
+      <button data-value="hardcore">Hardcore</button>
+    </div>
+  </div>
+
+  <div class="topbar-actions">
+    <button class="btn btn-primary" id="btn-scan">Scan</button>
+    <button class="btn" id="btn-cancel" hidden>Cancel</button>
+    <div class="menu-wrap">
+      <button class="btn" id="btn-export" aria-haspopup="true" aria-expanded="false">Export</button>
+      <div class="menu" id="export-menu" hidden role="menu">
+        <button role="menuitem" data-fmt="xlsx">Excel workbook (.xlsx)</button>
+        <button role="menuitem" data-fmt="csv">CSV (.csv)</button>
+      </div>
+    </div>
+    <button class="btn btn-icon" id="btn-settings" title="Credentials" aria-label="Credentials">⚙</button>
+    <button class="btn btn-icon" id="btn-theme" title="Toggle theme" aria-label="Toggle theme">◐</button>
+  </div>
+</header>
+
+<section class="scanbar" id="scanbar" hidden aria-live="polite">
+  <div class="scanbar-track"><div class="scanbar-fill" id="scanbar-fill"></div></div>
+  <div class="scanbar-text">
+    <span id="scanbar-count" class="tabular"></span>
+    <span id="scanbar-detail" class="muted"></span>
+  </div>
+</section>
+
+<!-- Timer for the session currently being logged -->
+<section class="nowplaying" id="nowplaying" hidden>
+  <span class="np-dot" aria-hidden="true">●</span>
+  <span>Playing <strong id="np-title"></strong></span>
+  <span class="np-clock tabular" id="np-clock">0:00</span>
+  <button class="btn btn-small" id="np-stop">Stop &amp; log</button>
+</section>
+
+<main class="layout">
+  <div class="col-main">
+    <section class="kpis" id="kpis" aria-label="Backlog summary">
+      <div class="tile"><div class="tile-label">Games</div><div class="tile-value tabular" id="kpi-games">–</div><div class="tile-note" id="kpi-games-note"></div></div>
+      <div class="tile"><div class="tile-label" id="kpi-hours-label">Total time</div><div class="tile-value tabular" id="kpi-hours">–</div><div class="tile-note" id="kpi-hours-note"></div></div>
+      <div class="tile"><div class="tile-label">Average game</div><div class="tile-value tabular" id="kpi-avg">–</div><div class="tile-note" id="kpi-avg-note">to master</div></div>
+      <div class="tile"><div class="tile-label">Points available</div><div class="tile-value tabular" id="kpi-points">–</div><div class="tile-note" id="kpi-points-note"></div></div>
+    </section>
+
+    <section class="panel">
+      <div class="filters">
+        <input type="search" id="f-search" class="input" placeholder="Search title…" aria-label="Search titles">
+        <select id="f-system" class="input" aria-label="Filter by system"><option value="">All systems</option></select>
+        <select id="f-tag" class="input" aria-label="Filter by tag"><option value="">Any tag</option></select>
+        <select id="f-quality" class="input" aria-label="Filter by match quality">
+          <option value="">Any match quality</option>
+          <option value="exact">Exact</option>
+          <option value="fuzzy">Fuzzy</option>
+          <option value="loose">Loose</option>
+          <option value="poor">Poor — verify</option>
+          <option value="none">No match</option>
+        </select>
+        <label class="check"><input type="checkbox" id="f-hastime"> Has time data</label>
+        <label class="check"><input type="checkbox" id="f-pinned"> Pinned</label>
+
+        <div class="menu-wrap">
+          <button class="btn btn-small" id="btn-views" aria-haspopup="true">Views ▾</button>
+          <div class="menu" id="views-menu" hidden role="menu"></div>
+        </div>
+        <span class="row-count muted tabular" id="row-count"></span>
+      </div>
+
+      <div class="table-scroll">
+        <table class="grid" id="grid">
+          <thead>
+            <tr>
+              <th class="col-pin" aria-label="Pinned"></th>
+              <th data-sort="title" class="col-title">Title</th>
+              <th data-sort="system">System</th>
+              <th data-sort="points" class="num">Points</th>
+              <th data-sort="effective_hours" class="num" id="th-hours">Hours</th>
+              <th data-sort="rarity_score" class="num">Difficulty</th>
+              <th data-sort="completion_pct" class="num">Done</th>
+              <th data-sort="points_per_hour" class="num sorted-desc">Points/hr</th>
+              <th data-sort="match_quality">Match</th>
+            </tr>
+          </thead>
+          <tbody id="grid-body"></tbody>
+        </table>
+        <p class="empty" id="empty" hidden>Nothing here yet. Hit <strong>Scan</strong> to pull your Want to Play list.</p>
+      </div>
+    </section>
+  </div>
+
+  <aside class="col-side">
+    <nav class="tabs" id="side-tabs" role="tablist">
+      <button role="tab" data-tab="overview" class="on">Overview</button>
+      <button role="tab" data-tab="play">Play</button>
+      <button role="tab" data-tab="plan">Plan</button>
+      <button role="tab" data-tab="watch">Watch</button>
+    </nav>
+
+    <!-- Overview -->
+    <div class="tabpanel on" data-panel="overview">
+      <section class="panel">
+        <h2 class="panel-title">Games by system</h2>
+        <div class="bars" id="system-bars"></div>
+      </section>
+      <section class="panel">
+        <h2 class="panel-title">HLTB match quality</h2>
+        <ul class="statuslist" id="quality-list"></ul>
+      </section>
+      <section class="panel" id="pace-panel">
+        <h2 class="panel-title">Your pace</h2>
+        <div id="pace-body"><p class="panel-note">Log a session to start calibrating.</p></div>
+      </section>
+    </div>
+
+    <!-- Play: what to do right now -->
+    <div class="tabpanel" data-panel="play">
+      <section class="panel">
+        <h2 class="panel-title">Nearly there</h2>
+        <p class="panel-note">A handful of achievements from done.</p>
+        <div id="nearly-body"><p class="panel-note muted">Nothing close yet.</p></div>
+      </section>
+      <section class="panel">
+        <h2 class="panel-title">Pick something for me</h2>
+        <div class="planner-controls">
+          <label class="field"><span>Max hours</span>
+            <input type="number" id="roul-hours" class="input" value="10" min="1"></label>
+          <button class="btn btn-primary" id="btn-roulette">Spin</button>
+        </div>
+        <div id="roulette-body"></div>
+      </section>
+    </div>
+
+    <!-- Plan -->
+    <div class="tabpanel" data-panel="plan">
+      <section class="panel">
+        <h2 class="panel-title">Session planner</h2>
+        <p class="panel-note">Best points in a fixed number of hours.</p>
+        <div class="planner-controls">
+          <label class="field"><span>Hours</span>
+            <input type="number" id="plan-budget" class="input" value="20" min="1"></label>
+          <button class="btn btn-primary" id="btn-plan">Plan</button>
+        </div>
+        <div id="plan-result"></div>
+      </section>
+      <section class="panel">
+        <h2 class="panel-title">Points target</h2>
+        <p class="panel-note">Cheapest route to a points goal.</p>
+        <div class="planner-controls">
+          <label class="field"><span>Points</span>
+            <input type="number" id="target-points" class="input" value="2000" min="1" step="100"></label>
+          <button class="btn btn-primary" id="btn-target">Find</button>
+        </div>
+        <div id="target-result"></div>
+      </section>
+      <section class="panel">
+        <h2 class="panel-title">Schedule</h2>
+        <p class="panel-note">A calendar, not a basket.</p>
+        <div class="planner-controls">
+          <label class="field"><span>Hours/week</span>
+            <input type="number" id="sched-hours" class="input" value="8" min="1"></label>
+          <label class="field"><span>Weeks</span>
+            <input type="number" id="sched-weeks" class="input" value="8" min="1" max="52"></label>
+          <button class="btn btn-primary" id="btn-schedule">Build</button>
+        </div>
+        <div id="schedule-result"></div>
+      </section>
+    </div>
+
+    <!-- Watch -->
+    <div class="tabpanel" data-panel="watch">
+      <section class="panel">
+        <h2 class="panel-title">Sets in progress</h2>
+        <p class="panel-note">On your list, no achievements published yet.</p>
+        <div id="newsets-body"></div>
+      </section>
+      <section class="panel">
+        <h2 class="panel-title">Events</h2>
+        <p class="panel-note">Community events overlapping your backlog.</p>
+        <div id="events-body"></div>
+        <button class="btn btn-small" id="btn-edit-events">Edit event list</button>
+      </section>
+    </div>
+  </aside>
+</main>
+
+<!-- Game detail drawer -->
+<div class="drawer-scrim" id="drawer-scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Game detail">
+  <header class="drawer-head">
+    <div>
+      <h2 id="drawer-title">—</h2>
+      <p class="muted" id="drawer-sub"></p>
+    </div>
+    <button class="btn btn-icon" id="drawer-close" aria-label="Close">✕</button>
+  </header>
+
+  <div class="drawer-actions">
+    <button class="btn btn-primary btn-small" id="drawer-play">▶ Start session</button>
+    <button class="btn btn-small" id="drawer-launch" hidden>🎮 Launch</button>
+    <button class="btn btn-small" id="drawer-pin">📌 Pin</button>
+    <button class="btn btn-small" id="drawer-hide">Hide</button>
+  </div>
+
+  <div class="drawer-stats" id="drawer-stats"></div>
+
+  <section class="drawer-section">
+    <h3>Tags</h3>
+    <div class="tagrow" id="drawer-tags"></div>
+    <form class="inline-form" id="tag-form">
+      <input class="input" id="tag-input" placeholder="Add a tag…" aria-label="Add a tag">
+      <button class="btn btn-small" type="submit">Add</button>
+    </form>
+  </section>
+
+  <section class="drawer-section">
+    <h3>Note</h3>
+    <textarea class="input" id="drawer-note" rows="3" placeholder="Anything worth remembering…"></textarea>
+    <button class="btn btn-small" id="btn-save-note">Save note</button>
+  </section>
+
+  <section class="drawer-section">
+    <h3>Achievements <span class="muted" id="ach-count"></span></h3>
+    <div id="drawer-achievements"><p class="panel-note muted">Run a scan to pull achievement detail.</p></div>
+  </section>
+
+  <section class="drawer-section">
+    <h3>Sessions</h3>
+    <div id="drawer-sessions"></div>
+    <form class="inline-form" id="session-form">
+      <input class="input" id="session-minutes" type="number" min="1" placeholder="Minutes" aria-label="Minutes played">
+      <button class="btn btn-small" type="submit">Log</button>
+    </form>
+  </section>
+
+  <section class="drawer-section" id="rom-section">
+    <h3>ROM</h3>
+    <div id="rom-body"></div>
+  </section>
+</aside>
+
+<dialog class="modal" id="creds-modal">
+  <form method="dialog" id="creds-form">
+    <h2>RetroAchievements credentials</h2>
+    <p class="panel-note">Stored in your <span id="creds-storage">system keyring</span>. Never sent anywhere but retroachievements.org.</p>
+    <label class="field"><span>Username</span><input class="input" id="creds-user" autocomplete="username" required></label>
+    <label class="field"><span>API key</span><input class="input" id="creds-key" type="password" autocomplete="off" required></label>
+    <p class="panel-note">Find your key at <a href="https://retroachievements.org/settings" target="_blank" rel="noopener">retroachievements.org/settings</a>.</p>
+    <p class="panel-note muted" id="creds-db"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-quiet" id="creds-clear">Clear stored</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="creds-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="modal" id="events-modal">
+  <form method="dialog" id="events-form">
+    <h2>Community events</h2>
+    <p class="panel-note">RetroAchievements has no public API for Achievement of the Week, so this list is yours to maintain. One event per line:
+      <code>Name | RA game ID | ends YYYY-MM-DD</code></p>
+    <textarea class="input" id="events-text" rows="7" placeholder="Achievement of the Week | 18 | 2026-09-30"></textarea>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button type="button" class="btn" id="events-cancel">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast-stack" id="toasts" aria-live="polite"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

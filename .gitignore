@@ -16,3 +16,14 @@ hltb_progress.json
 # Environments
 .venv/
 env/
+# SQLite backlog database (regenerate with a scan)
+backlog.db
+backlog.db-wal
+backlog.db-shm
+
+# Packaging / tooling
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+venv/
